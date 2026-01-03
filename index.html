@@ -1,156 +1,207 @@
 <!DOCTYPE html>
-<html>
+<html lang="en">
 <head>
-    <title>Grand Event Duck Race</title>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
+    <title>Pro Duck Dash: Event Edition</title>
     <style>
-        body { font-family: 'Segoe UI', Arial, sans-serif; background: #1a1a1a; color: white; text-align: center; margin: 0; }
-        .setup-screen { background: #2c3e50; padding: 20px; border-bottom: 5px solid #f1c40f; }
-        canvas { background: #2980b9; display: block; margin: 20px auto; border-radius: 8px; box-shadow: 0 0 50px rgba(0,0,0,0.8); cursor: crosshair; }
-        .ui-panel { display: flex; justify-content: center; gap: 20px; align-items: center; flex-wrap: wrap; }
-        textarea { width: 300px; height: 50px; border-radius: 5px; padding: 10px; }
-        .timer-setting { font-weight: bold; color: #f1c40f; }
-        button { background: #27ae60; color: white; border: none; padding: 15px 40px; font-size: 20px; border-radius: 50px; cursor: pointer; font-weight: bold; box-shadow: 0 4px #1e8449; }
-        button:active { box-shadow: 0 0; transform: translateY(4px); }
-        #announcer { font-size: 28px; color: #f1c40f; margin: 10px; height: 40px; text-transform: uppercase; font-weight: bold; letter-spacing: 2px; }
+        :root { --neon-yellow: #f1c40f; --bg-dark: #0f172a; }
+        body { 
+            margin: 0; padding: 0; background: var(--bg-dark); 
+            color: white; font-family: 'Inter', system-ui, sans-serif;
+            overflow-x: hidden; touch-action: manipulation;
+        }
+        .container { display: flex; flex-direction: column; height: 100vh; }
+        
+        /* Smooth UI Header */
+        header { 
+            padding: 15px; background: rgba(30, 41, 59, 0.8); 
+            backdrop-filter: blur(10px); border-bottom: 2px solid #334155;
+        }
+        .input-group { display: flex; gap: 8px; flex-direction: column; max-width: 500px; margin: 0 auto; }
+        textarea { 
+            background: #1e293b; border: 1px solid #475569; color: white;
+            padding: 12px; border-radius: 8px; resize: none; font-size: 14px;
+        }
+        .controls-row { display: flex; justify-content: space-between; align-items: center; margin-top: 10px; }
+        
+        button { 
+            background: var(--neon-yellow); color: black; border: none;
+            padding: 12px 24px; border-radius: 8px; font-weight: 800;
+            text-transform: uppercase; cursor: pointer; transition: 0.2s;
+        }
+        button:active { transform: scale(0.95); }
+
+        #status-bar { 
+            text-align: center; font-weight: 900; font-size: 1.2rem;
+            padding: 10px; color: var(--neon-yellow); height: 30px;
+        }
+
+        /* Canvas should fill remaining space */
+        #game-wrapper { flex-grow: 1; position: relative; width: 100%; overflow: hidden; }
+        canvas { display: block; width: 100%; height: 100%; touch-action: none; }
     </style>
 </head>
 <body>
 
-<div class="setup-screen" id="setup">
-    <h1>🦆 EVENT DUCK RACE 🏁</h1>
-    <div class="ui-panel">
-        <div>
-            <label>Friends (Names):</label><br>
-            <textarea id="nameInput">Alex, Jordan, Taylor, Sam, Quinn, Casey</textarea>
+<div class="container">
+    <header>
+        <div class="input-group">
+            <textarea id="nameInput" placeholder="Enter names separated by commas...">Alex, Jordan, Taylor, Sam, Quinn, Casey</textarea>
+            <div class="controls-row">
+                <div style="font-size: 12px;">
+                    TIME: <span id="timeDisplay">20</span>s<br>
+                    <input type="range" id="durationInput" min="5" max="60" value="20" 
+                           oninput="document.getElementById('timeDisplay').innerText=this.value">
+                </div>
+                <button onclick="startRace()">Launch Race</button>
+            </div>
         </div>
-        <div>
-            <label>Race Duration: <span class="timer-setting" id="timeVal">20</span>s</label><br>
-            <input type="range" id="durationInput" min="10" max="60" value="20" oninput="document.getElementById('timeVal').innerText=this.value">
-        </div>
-        <button onclick="startEvent()">START THE EVENT</button>
+    </header>
+
+    <div id="status-bar">READY FOR THE DROP</div>
+
+    <div id="game-wrapper">
+        <canvas id="raceCanvas"></canvas>
     </div>
 </div>
-
-<div id="announcer">Waiting for the line-up...</div>
-<canvas id="raceCanvas" width="1000" height="500"></canvas>
 
 <script>
     const canvas = document.getElementById('raceCanvas');
     const ctx = canvas.getContext('2d');
-    const announcer = document.getElementById('announcer');
-    
+    const statusBar = document.getElementById('status-bar');
     let ducks = [];
     let racing = false;
-    let startTime;
-    let raceDuration; // in milliseconds
+    let startTime, duration;
     let audioCtx = new (window.AudioContext || window.webkitAudioContext)();
 
-    // Procedural Quack Sound (No files needed!)
-    function playQuack() {
+    function playBeep(freq = 440, duration = 0.1) {
+        if (audioCtx.state === 'suspended') audioCtx.resume();
         const osc = audioCtx.createOscillator();
         const gain = audioCtx.createGain();
-        osc.type = 'sawtooth';
-        osc.frequency.setValueAtTime(400, audioCtx.currentTime);
-        osc.frequency.exponentialRampToValueAtTime(200, audioCtx.currentTime + 0.1);
-        gain.gain.setValueAtTime(0.1, audioCtx.currentTime);
-        gain.gain.exponentialRampToValueAtTime(0.01, audioCtx.currentTime + 0.1);
+        osc.type = 'square';
+        osc.frequency.setValueAtTime(freq, audioCtx.currentTime);
+        gain.gain.setValueAtTime(0.05, audioCtx.currentTime);
+        gain.gain.exponentialRampToValueAtTime(0.001, audioCtx.currentTime + duration);
         osc.connect(gain);
         gain.connect(audioCtx.destination);
         osc.start();
-        osc.stop(audioCtx.currentTime + 0.1);
+        osc.stop(audioCtx.currentTime + duration);
     }
 
-    function startEvent() {
-        if (audioCtx.state === 'suspended') audioCtx.resume();
-        
+    function resize() {
+        canvas.width = window.innerWidth;
+        canvas.height = canvas.parentElement.clientHeight;
+    }
+    window.addEventListener('resize', resize);
+    resize();
+
+    function startRace() {
         const names = document.getElementById('nameInput').value.split(/[, \n]+/).filter(n => n.trim() !== "");
-        raceDuration = document.getElementById('durationInput').value * 1000;
+        if(names.length < 1) return;
         
+        duration = document.getElementById('durationInput').value * 1000;
+        const laneHeight = canvas.height / (names.length + 1);
+
         ducks = names.map((name, i) => ({
             name: name,
-            x: 50,
-            y: 80 + (i * (380 / names.length)),
-            color: `hsl(${Math.random() * 360}, 80%, 60%)`,
-            offset: Math.random() * 1000, // For unique pathing
-            finished: false,
-            rank: 0
+            x: 40,
+            y: laneHeight * (i + 1),
+            color: `hsl(${Math.random() * 360}, 80%, 60%)`, // Unique name color
+            progress: 0,
+            offset: Math.random() * 100,
+            finished: false
         }));
 
         startTime = Date.now();
         racing = true;
-        announcer.innerText = "READY... SET... QUACK!";
-        playQuack();
+        statusBar.innerText = "🚥 BEEP... BEEP... GO!";
+        playBeep(880, 0.2);
         animate();
+    }
+
+    function drawDuck(x, y, nameColor, name) {
+        ctx.save();
+        ctx.translate(x, y);
+        
+        // Body (Yellow)
+        ctx.fillStyle = "#f1c40f";
+        ctx.beginPath();
+        ctx.ellipse(0, 0, 18, 14, 0, 0, Math.PI * 2);
+        ctx.fill();
+        
+        // Head (Yellow)
+        ctx.beginPath();
+        ctx.arc(12, -10, 10, 0, Math.PI * 2);
+        ctx.fill();
+
+        // Eye
+        ctx.fillStyle = "black";
+        ctx.beginPath();
+        ctx.arc(15, -12, 1.5, 0, Math.PI * 2);
+        ctx.fill();
+
+        // Beak
+        ctx.fillStyle = "#e67e22";
+        ctx.beginPath();
+        ctx.moveTo(20, -10); ctx.lineTo(28, -8); ctx.lineTo(20, -6);
+        ctx.fill();
+
+        // Name Tag (The distinct part)
+        ctx.fillStyle = nameColor;
+        ctx.font = "bold 14px sans-serif";
+        ctx.textAlign = "center";
+        ctx.shadowBlur = 4;
+        ctx.shadowColor = "black";
+        ctx.fillText(name, 0, -28);
+        
+        ctx.restore();
     }
 
     function animate() {
         if (!racing) return;
-
-        const elapsed = Date.now() - startTime;
-        const progress = Math.min(elapsed / raceDuration, 1);
+        const now = Date.now();
+        const elapsed = now - startTime;
+        const rawProgress = Math.min(elapsed / duration, 1);
         
-        ctx.clearRect(0, 0, canvas.width, canvas.height);
+        ctx.fillStyle = "#0f172a";
+        ctx.fillRect(0, 0, canvas.width, canvas.height);
 
-        // Draw Water Ripples
-        ctx.strokeStyle = "rgba(255,255,255,0.1)";
-        for(let i=0; i<5; i++) {
-            let rx = (elapsed * 0.1 + (i * 200)) % 1000;
-            ctx.beginPath(); ctx.moveTo(rx, 0); ctx.lineTo(rx-50, 500); ctx.stroke();
-        }
-
-        // Draw Finish Line
-        ctx.fillStyle = "#f1c40f";
-        ctx.fillRect(920, 0, 10, 500);
+        // Finish Line
+        ctx.strokeStyle = "rgba(255, 255, 255, 0.2)";
+        ctx.setLineDash([5, 5]);
+        ctx.beginPath();
+        ctx.moveTo(canvas.width - 60, 0);
+        ctx.lineTo(canvas.width - 60, canvas.height);
+        ctx.stroke();
+        ctx.setLineDash([]);
 
         ducks.forEach(duck => {
             if (!duck.finished) {
-                // Suspense Physics: Each duck follows a sine wave but stays close to the average progress
-                // We add random "wobble" to the progress so they overtake each other
-                let duckProgress = progress + (Math.sin(elapsed/500 + duck.offset) * 0.05);
+                // Suspense logic: Add micro-variations to progress
+                let noise = Math.sin(elapsed / 400 + duck.offset) * 0.02;
+                duck.progress = rawProgress + noise;
                 
-                // Sudden Boost Logic
-                if(Math.random() > 0.995) {
-                    duckProgress += 0.08; 
-                    playQuack();
+                // Random Boosts
+                if(Math.random() > 0.997) {
+                    playBeep(660, 0.05);
+                    duck.progress += 0.05;
                 }
 
-                duck.x = 50 + (870 * Math.max(0, duckProgress));
-                
-                if (duck.x >= 920) {
+                duck.x = 40 + (canvas.width - 120) * Math.max(0, duck.progress);
+
+                if (duck.x >= canvas.width - 80) {
                     duck.finished = true;
-                    duck.rank = ducks.filter(d => d.finished).length;
-                    if(duck.rank === 1) {
-                        announcer.innerText = `🏆 ${duck.name} TAKES THE LEAD! 🏆`;
-                        playQuack(); setTimeout(playQuack, 150);
+                    if(ducks.filter(d => d.finished).length === 1) {
+                        statusBar.innerText = `🏆 WINNER: ${duck.name.toUpperCase()}`;
+                        playBeep(1100, 0.3);
                     }
                 }
             }
-
-            // Draw Duck
-            ctx.save();
-            let wobble = Math.sin(elapsed/150 + duck.offset) * 5;
-            ctx.translate(duck.x, duck.y + wobble);
-            
-            // Body
-            ctx.fillStyle = duck.color;
-            ctx.beginPath(); ctx.ellipse(0, 0, 20, 15, 0, 0, Math.PI*2); ctx.fill();
-            // Head
-            ctx.beginPath(); ctx.arc(15, -12, 10, 0, Math.PI*2); ctx.fill();
-            // Beak
-            ctx.fillStyle = "orange";
-            ctx.beginPath(); ctx.moveTo(22, -12); ctx.lineTo(32, -10); ctx.lineTo(22, -8); ctx.fill();
-            // Name
-            ctx.fillStyle = "white";
-            ctx.font = "bold 16px Arial";
-            ctx.textAlign = "center";
-            ctx.fillText(duck.name, 0, -30);
-            
-            ctx.restore();
+            drawDuck(duck.x, duck.y, duck.color, duck.name);
         });
 
         if (ducks.every(d => d.finished)) {
-            const winner = ducks.find(d => d.rank === 1);
-            announcer.innerText = `🎉 CHAMPION: ${winner.name}! 🎉`;
             racing = false;
         } else {
             requestAnimationFrame(animate);
@@ -159,4 +210,3 @@
 </script>
 </body>
 </html>
-
