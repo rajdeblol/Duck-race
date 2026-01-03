@@ -1,0 +1,144 @@
+<!DOCTYPE html>
+<html>
+<head>
+    <title>Ultimate Friend Duck Race</title>
+    <style>
+        body { font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif; background: #2c3e50; color: white; text-align: center; margin: 0; overflow: hidden; }
+        .ui-layer { position: absolute; width: 100%; top: 20px; pointer-events: none; }
+        canvas { background: #3498db; border-bottom: 15px solid #2ecc71; border-top: 15px solid #2ecc71; box-shadow: 0 10px 30px rgba(0,0,0,0.5); }
+        .controls { background: #34495e; padding: 20px; }
+        textarea { width: 400px; height: 60px; border-radius: 8px; border: none; padding: 10px; font-size: 16px; }
+        button { background: #e67e22; color: white; border: none; padding: 15px 30px; font-size: 18px; border-radius: 8px; cursor: pointer; font-weight: bold; transition: 0.3s; }
+        button:hover { background: #d35400; transform: scale(1.05); }
+        #commentary { font-style: italic; color: #f1c40f; height: 30px; margin-top: 10px; font-size: 20px; text-shadow: 2px 2px 4px black; }
+    </style>
+</head>
+<body>
+
+    <div class="controls">
+        <h1>🦆 DUCK RACE ROYALE 🏁</h1>
+        <textarea id="nameInput" placeholder="Enter friends names (Alice, Bob, Charlie...)">Alice, Bob, Charlie, Dave, Eve</textarea><br><br>
+        <button onclick="initRace()">RELEASE THE DUCKS!</button>
+        <div id="commentary">Waiting for the race to start...</div>
+    </div>
+
+    <canvas id="raceCanvas" width="1000" height="500"></canvas>
+
+    <script>
+        const canvas = document.getElementById('raceCanvas');
+        const ctx = canvas.getContext('2d');
+        const comms = document.getElementById('commentary');
+        let ducks = [];
+        let racing = false;
+        let frame = 0;
+
+        function initRace() {
+            const names = document.getElementById('nameInput').value.split(/[, \n]+/).filter(n => n.trim() !== "");
+            if(names.length < 2) return alert("Add more friends!");
+            
+            ducks = names.map((name, i) => ({
+                name: name,
+                x: 50,
+                y: 60 + (i * (400 / names.length)),
+                speed: 0,
+                color: `hsl(${Math.random() * 360}, 80%, 60%)`,
+                wobble: 0,
+                status: '',
+                boostTimer: 0,
+                finished: false
+            }));
+            
+            racing = true;
+            comms.innerText = "AND THEY'RE OFF!";
+            animate();
+        }
+
+        function animate() {
+            if (!racing) return;
+            frame++;
+            ctx.clearRect(0, 0, canvas.width, canvas.height);
+
+            // Draw Finish Line (Checkerboard style)
+            ctx.fillStyle = "white";
+            for(let i=0; i<canvas.height; i+=20) {
+                if(i%40==0) ctx.fillRect(920, i, 20, 20);
+                else ctx.fillRect(940, i, 20, 20);
+            }
+
+            // Update & Sort ducks for commentary
+            let sortedDucks = [...ducks].sort((a,b) => b.x - a.x);
+            if(frame % 100 === 0 && !sortedDucks[0].finished) {
+                comms.innerText = `${sortedDucks[0].name} is in the lead! ${sortedDucks[sortedDucks.length-1].name} needs to hurry up!`;
+            }
+
+            ducks.forEach(duck => {
+                if (!duck.finished) {
+                    // Random Chaos Factor
+                    let rng = Math.random();
+                    if(rng > 0.99) { duck.boostTimer = 30; duck.status = "🚀 BOOST!"; }
+                    if(rng < 0.005) { duck.boostTimer = -20; duck.status = "🧊 STUCK!"; }
+
+                    // Movement Logic
+                    let accel = Math.random() * 0.4;
+                    if(duck.boostTimer > 0) { accel += 0.8; duck.boostTimer--; }
+                    if(duck.boostTimer < 0) { accel = 0; duck.boostTimer++; }
+                    
+                    // Rubber-banding (help the losers stay in frame)
+                    if(duck.x < sortedDucks[0].x - 200) accel += 0.2;
+
+                    duck.speed = (duck.speed + accel) * 0.95;
+                    duck.x += duck.speed;
+                    duck.wobble = Math.sin(frame * 0.2) * 5;
+
+                    if (duck.x >= 920) {
+                        duck.finished = true;
+                        duck.finishTime = frame;
+                        if(ducks.filter(d => d.finished).length === 1) {
+                            comms.innerText = `🏆 ${duck.name.toUpperCase()} WINS!! 🏆`;
+                        }
+                    }
+                }
+
+                // Draw Duck Body
+                ctx.save();
+                ctx.translate(duck.x, duck.y + duck.wobble);
+                
+                // Shadow
+                ctx.fillStyle = "rgba(0,0,0,0.2)";
+                ctx.beginPath(); ctx.ellipse(0, 15, 15, 8, 0, 0, Math.PI*2); ctx.fill();
+
+                // Duck Head & Body
+                ctx.fillStyle = duck.color;
+                ctx.beginPath(); ctx.arc(0, 0, 18, 0, Math.PI*2); ctx.fill(); // Body
+                ctx.beginPath(); ctx.arc(12, -10, 10, 0, Math.PI*2); ctx.fill(); // Head
+                
+                // Beak
+                ctx.fillStyle = "#f39c12";
+                ctx.beginPath(); ctx.moveTo(20, -10); ctx.lineTo(28, -8); ctx.lineTo(20, -5); ctx.fill();
+
+                // Name Tag
+                ctx.fillStyle = "white";
+                ctx.font = "bold 14px Arial";
+                ctx.textAlign = "center";
+                ctx.fillText(duck.name, 0, -25);
+                
+                // Status Text
+                if(duck.boostTimer !== 0) {
+                    ctx.fillStyle = duck.boostTimer > 0 ? "#2ecc71" : "#e74c3c";
+                    ctx.font = "10px Arial";
+                    ctx.fillText(duck.status, 0, 30);
+                }
+
+                ctx.restore();
+            });
+
+            if (ducks.every(d => d.finished)) {
+                // Show final podium after a delay
+                setTimeout(() => { racing = false; }, 2000);
+            } else {
+                requestAnimationFrame(animate);
+            }
+        }
+    </script>
+</body>
+</html>
